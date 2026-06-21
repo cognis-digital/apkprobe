@@ -33,7 +33,10 @@ pip install -e ".[dev]"          # + pytest
 apkprobe scan app.apk
 
 # Machine-readable, only MEDIUM and above
-apkprobe scan app.apk --json --min-severity MEDIUM
+apkprobe scan app.apk --format json --min-severity MEDIUM
+
+# SARIF for GitHub code-scanning / any SARIF dashboard
+apkprobe scan app.apk --format sarif > apkprobe.sarif
 
 # Gated by an authorized engagement scope (refuses unlisted packages)
 export SCOPEWARD_KEY=...           # the engagement key
@@ -41,7 +44,16 @@ apkprobe scan app.apk --scope engagement.json
 ```
 
 Exit code is non-zero when any **HIGH+** finding is present, so it drops
-straight into a CI gate.
+straight into a CI gate. Upload the SARIF to GitHub code scanning:
+
+```yaml
+- run: apkprobe scan app.apk --format sarif > apkprobe.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: apkprobe.sarif }
+```
+
+Each MASVS/MASTG check becomes a SARIF rule (with a `mas.owasp.org` help link),
+each finding a result with a stable fingerprint for cross-run dedup.
 
 ### Example output
 

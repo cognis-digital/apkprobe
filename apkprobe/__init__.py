@@ -11,6 +11,7 @@ from .apk import Apk, ApkInfo
 from .rules import analyze_manifest, Finding, Severity
 from .secrets import scan_text, SecretHit
 from .analyzer import analyze_apk, Report
+from .sarif import to_sarif, to_sarif_json
 
 __all__ = [
     "parse", "Element", "AXMLError",
@@ -19,6 +20,7 @@ __all__ = [
     "analyze_manifest", "Finding", "Severity",
     "scan_text", "SecretHit",
     "analyze_apk", "Report",
+    "to_sarif", "to_sarif_json",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
