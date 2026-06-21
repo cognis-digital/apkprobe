@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "apkprobe"
+version = "0.1.0"
+description = "Android APK static security analyzer — MASTG-aligned, with a from-scratch binary-AXML decoder."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "COCL-1.0" }
+authors = [{ name = "Cognis Digital", email = "dev@cognis.digital" }]
+keywords = ["android", "apk", "mobile-security", "static-analysis", "masvs", "mastg", "axml", "pentest"]
+classifiers = [
+  "Intended Audience :: Information Technology",
+  "Topic :: Security",
+  "Programming Language :: Python :: 3",
+]
+dependencies = []
+
+[project.optional-dependencies]
+scope = ["scopeward"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+apkprobe = "apkprobe.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apkprobe"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
