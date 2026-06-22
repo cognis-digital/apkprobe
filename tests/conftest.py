@@ -68,3 +68,48 @@ def apk_path(tmp_path, manifest_axml) -> str:
     p = tmp_path / "app.apk"
     p.write_bytes(data)
     return str(p)
+
+
+def _benign_tree():
+    """A minimal, hardened manifest: no debuggable/cleartext, guarded export."""
+    return {
+        "tag": "manifest",
+        "attrs": {"package": ("string", "com.acme.app"), "versionCode": ("int", 6)},
+        "children": [
+            {"tag": "uses-sdk", "attrs": {"minSdkVersion": ("int", 28),
+                                           "targetSdkVersion": ("int", 33)}},
+            {"tag": "uses-permission",
+             "attrs": {"name": ("string", "android.permission.INTERNET")}},
+            {
+                "tag": "application",
+                "attrs": {"label": ("string", "Acme"),
+                          "allowBackup": ("bool", False)},
+                "children": [
+                    {"tag": "activity",
+                     "attrs": {"name": ("string", ".MainActivity"),
+                               "exported": ("bool", False)}},
+                ],
+            },
+        ],
+    }
+
+
+@pytest.fixture
+def old_apk_path(tmp_path) -> str:
+    """Baseline: hardened, no secrets."""
+    data = build_apk(encode(_benign_tree()))
+    p = tmp_path / "old.apk"
+    p.write_bytes(data)
+    return str(p)
+
+
+@pytest.fixture
+def new_apk_path(tmp_path, manifest_axml) -> str:
+    """Candidate update: debuggable + cleartext + READ_SMS + embedded secret."""
+    data = build_apk(
+        manifest_axml,
+        extra={"res/raw/cfg.json": "{\"k\":\"AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\"}"},
+    )
+    p = tmp_path / "new.apk"
+    p.write_bytes(data)
+    return str(p)

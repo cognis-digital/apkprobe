@@ -22,6 +22,7 @@ class Report:
     package: str
     signature_schemes: list[str]
     findings: list = field(default_factory=list)
+    manifest: object = None   # the parsed AppManifest, for diffing/profiling
 
     def to_dict(self) -> dict:
         return {
@@ -63,6 +64,7 @@ def analyze_apk(path: str, authorizer: Optional[object] = None) -> Report:
             package=target_pkg,
             signature_schemes=apk.signature_schemes(),
             findings=findings,
+            manifest=manifest,
         )
 
         if not report.signature_schemes:

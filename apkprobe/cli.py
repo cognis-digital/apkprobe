@@ -1,10 +1,14 @@
 """apkprobe command-line interface.
 
-    apkprobe scan app.apk [--format table|json|sarif] [--min-severity MEDIUM]
-                          [--scope s.json --key-env SCOPEWARD_KEY]
+    apkprobe scan    app.apk [--format table|json|sarif] [--min-severity MEDIUM]
+                             [--scope s.json --key-env SCOPEWARD_KEY]
+    apkprobe profile app.apk [--format table|json]
+    apkprobe diff    old.apk new.apk [--format table|json] [--fail-on-regression]
 
-With ``--scope`` the analysis is gated by scopeward: the APK's package must be
-an authorized target or the run is refused.
+``scan``    runs MASVS/MASTG checks (optionally gated by scopeward).
+``profile`` maps permissions to abuse vectors and scores the attack surface.
+``diff``    compares two APK versions and flags security regressions, the way a
+            defender vets an app *update* (supply-chain / update-time review).
 """
 
 from __future__ import annotations
@@ -71,6 +75,40 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return 1 if report.max_severity() >= int(Severity.HIGH) else 0
 
 
+def cmd_profile(args: argparse.Namespace) -> int:
+    from .attacksurface import profile, render_text
+    try:
+        report = analyze_apk(args.apk)
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    surf = profile(report.manifest)
+    if args.json or args.format == "json":
+        print(json.dumps(surf.to_dict(), indent=2))
+    else:
+        print(render_text(surf))
+    # Non-zero exit for a failing grade, so `profile` also gates CI.
+    return 1 if surf.grade in ("E", "F") else 0
+
+
+def cmd_diff(args: argparse.Namespace) -> int:
+    from .diff import diff_reports, render_text
+    try:
+        old = analyze_apk(args.old)
+        new = analyze_apk(args.new)
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    res = diff_reports(old, new)
+    if args.json or args.format == "json":
+        print(json.dumps(res.to_dict(), indent=2))
+    else:
+        print(render_text(res))
+    if args.fail_on_regression and res.regressions():
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="apkprobe", description=__doc__.splitlines()[0])
     parser.add_argument("--version", action="store_true")
@@ -84,6 +122,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scope", help="scopeward engagement scope JSON")
     p.add_argument("--key-env", default="SCOPEWARD_KEY")
     p.set_defaults(func=cmd_scan)
+
+    pp = sub.add_parser("profile", help="attack-surface profile + risk score")
+    pp.add_argument("apk")
+    pp.add_argument("--format", choices=("table", "json"), default="table")
+    pp.add_argument("--json", action="store_true", help="alias for --format json")
+    pp.set_defaults(func=cmd_profile)
+
+    pd = sub.add_parser("diff", help="diff two APK versions for regressions")
+    pd.add_argument("old")
+    pd.add_argument("new")
+    pd.add_argument("--format", choices=("table", "json"), default="table")
+    pd.add_argument("--json", action="store_true", help="alias for --format json")
+    pd.add_argument("--fail-on-regression", action="store_true",
+                    help="exit non-zero if any security regression is found")
+    pd.set_defaults(func=cmd_diff)
     return parser
 
 
