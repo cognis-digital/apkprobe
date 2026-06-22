@@ -1,0 +1,18 @@
+[package]
+name = "apkprobe-rules"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port of apkprobe's core MASVS/MASTG manifest rule engine (defensive, offline)."
+license = "LicenseRef-COCL-1.0"
+
+[[bin]]
+name = "apkprobe-rules"
+path = "src/main.rs"
+
+[lib]
+name = "apkprobe_rules"
+path = "src/lib.rs"
+
+# Intentionally dependency-free: hand-rolled minimal JSON so CI needs no network
+# to fetch crates. Keeps the port self-contained like the Python reference.
+[dependencies]

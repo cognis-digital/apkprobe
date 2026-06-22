@@ -17,6 +17,16 @@ from .attacksurface import (
     PermInfo,
 )
 from .diff import diff_manifests, diff_reports, DiffResult, Delta
+from .passive import (
+    component_inventory, triage_package_list, is_system_package,
+    Inventory, ComponentRow, TriageHit, render_inventory,
+)
+from .normalize import normalize_manifest, normalize_manifest_json
+from .active import (
+    DeviceAcquirer, ActiveConfig, RateLimiter, PullResult,
+    AdbCliBackend, ActiveError, AuthorizationError, ScopeError,
+    validate_serial, validate_package, BANNER,
+)
 
 __all__ = [
     "parse", "Element", "AXMLError",
@@ -29,6 +39,12 @@ __all__ = [
     "profile", "AttackSurface", "CapabilityHit", "ExposedComponent",
     "PERMISSION_KB", "PermInfo",
     "diff_manifests", "diff_reports", "DiffResult", "Delta",
+    "component_inventory", "triage_package_list", "is_system_package",
+    "Inventory", "ComponentRow", "TriageHit", "render_inventory",
+    "DeviceAcquirer", "ActiveConfig", "RateLimiter", "PullResult",
+    "AdbCliBackend", "ActiveError", "AuthorizationError", "ScopeError",
+    "validate_serial", "validate_package", "BANNER",
+    "normalize_manifest", "normalize_manifest_json",
 ]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
