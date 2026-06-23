@@ -6,6 +6,8 @@
     apkprobe diff      old.apk new.apk [--format table|json] [--fail-on-regression]
     apkprobe inventory app.apk [--format table|json]
     apkprobe triage    packages.txt [--allow pkg ...] [--include-system] [--json]
+    apkprobe vulns     app.apk [--format table|json] [--min-confidence ...] [--cve-only]
+    apkprobe feeds     list|update|get|... (offline OSV/NVD/GHSA edge cache)
     apkprobe pull      <package> --authorized --device-allowlist S [--device S]
 
 PASSIVE (default, offline, no device/network):
@@ -15,6 +17,11 @@ PASSIVE (default, offline, no device/network):
                 a defender vets an app *update* (supply-chain / update-time review).
   ``inventory`` flattens the IPC surface (exported/guarded components).
   ``triage``    offline triage of a captured ``pm list packages`` dump.
+  ``vulns``     harvest real component evidence (CVE/GHSA refs, Maven/npm/native
+                libs) from an APK and correlate it against the bundled ~262k OSV
+                vulnerability DB — fully offline. No fabricated intel.
+  ``feeds``     manage the offline OSV/NVD/GHSA/KEV edge cache (refresh online,
+                serve offline; air-gap snapshot import/export).
 
 ACTIVE (authorization-gated, OFF by default):
   ``pull``      copy an installed app off a CONNECTED device you OWN (via ADB) so
@@ -161,6 +168,43 @@ def cmd_triage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_vulns(args: argparse.Namespace) -> int:
+    """Correlate an APK's real component evidence with the bundled OSV DB (offline)."""
+    from .vulnmatch import enrich_apk, render_text, _CONFIDENCE
+    from .vulndb_local import VulnDB
+    try:
+        db = VulnDB(args.db) if args.db else VulnDB()
+        report = enrich_apk(args.apk, db=db)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # bad zip / parse error
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    hits = report.hits
+    if args.cve_only:
+        hits = [h for h in hits if h.cve.startswith("CVE-")]
+    if args.min_confidence:
+        floor = _CONFIDENCE.get(args.min_confidence, 0)
+        hits = [h for h in hits if _CONFIDENCE.get(h.confidence, 0) >= floor]
+    report.hits = hits
+
+    if args.json or args.format == "json":
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(render_text(report))
+    # Non-zero exit if any HIGH/CRITICAL advisory matched, so it gates CI too.
+    worst = report.max_severity_label()
+    return 1 if worst in ("HIGH", "CRITICAL") else 0
+
+
+def cmd_feeds(args: argparse.Namespace) -> int:
+    """Thin passthrough to the offline data-feed manager (OSV/NVD/GHSA/KEV edge cache)."""
+    from . import datafeeds
+    return datafeeds.main(args.feed_args)
+
+
 def cmd_pull(args: argparse.Namespace) -> int:
     """ACTIVE mode: authorization-gated pull off a connected device."""
     from .active import (
@@ -255,6 +299,32 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("--format", choices=("table", "json"), default="table")
     pt.add_argument("--json", action="store_true", help="alias for --format json")
     pt.set_defaults(func=cmd_triage)
+
+    pv = sub.add_parser(
+        "vulns",
+        help="correlate APK component evidence with the bundled OSV DB (offline)",
+    )
+    pv.add_argument("apk")
+    pv.add_argument("--format", choices=("table", "json"), default="table")
+    pv.add_argument("--json", action="store_true", help="alias for --format json")
+    pv.add_argument("--min-confidence",
+                    choices=("exact-advisory", "coordinate", "artifact-name",
+                             "native-name"),
+                    help="only show matches at or above this confidence")
+    pv.add_argument("--cve-only", action="store_true",
+                    help="only show matches that carry a CVE id")
+    pv.add_argument("--db", help="path to an alternate vuln DB (.jsonl.gz)")
+    pv.set_defaults(func=cmd_vulns)
+
+    pf = sub.add_parser(
+        "feeds",
+        help="manage the offline OSV/NVD/GHSA/KEV edge cache (refresh/snapshot)",
+    )
+    pf.add_argument("feed_args", nargs=argparse.REMAINDER,
+                    help="arguments passed through to the data-feed manager "
+                         "(list | update | get | bulk | snapshot-export | "
+                         "snapshot-import)")
+    pf.set_defaults(func=cmd_feeds)
 
     pu = sub.add_parser(
         "pull",

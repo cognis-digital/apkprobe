@@ -21,6 +21,8 @@ you already have and it reads them — no network, no device, no side effects.
 | `apkprobe diff`      | This is an *update* of an app I already vetted — **did it get worse?** |
 | `apkprobe inventory` | What's the IPC surface — which components are exported and unguarded? |
 | `apkprobe triage`    | Offline triage of a captured `pm list packages` dump (name-shape heuristics) |
+| `apkprobe vulns`     | Which **known CVEs** are tied to components this APK ships? (vs. a **bundled ~262k-record OSV DB**, offline) |
+| `apkprobe feeds`     | Manage the offline **OSV/NVD/GHSA/KEV edge cache** (refresh online, serve offline, air-gap snapshot) |
 
 ### Active subcommand (authorization-gated, OFF by default)
 
@@ -42,10 +44,20 @@ it runs anywhere Python runs — CI containers, air-gapped review boxes, a lapto
 ## Install
 
 ```bash
-pip install -e .                 # standalone
+# from a clone (recommended — ships the bundled vuln DB + feed catalog)
+git clone https://github.com/cognis-digital/apkprobe && cd apkprobe
+pip install -e .                 # standalone, zero runtime deps
 pip install -e ".[scope]"        # with scopeward engagement gating
 pip install -e ".[dev]"          # + pytest
+
+# or straight from PyPI/VCS
+pip install apkprobe
 ```
+
+The bundled **~262k-record OSV vulnerability DB** (`cognis_vulndb.jsonl.gz`,
+~6.4 MB) and the **35-feed catalog** (`data_feeds_2026.json`) ship inside the
+package, so `apkprobe vulns` and `apkprobe feeds` work offline immediately after
+install — no first-run download.
 
 ## Use
 
@@ -77,7 +89,92 @@ apkprobe inventory app.apk --json
 
 # Offline triage of a captured package list (e.g. a saved `pm list packages`)
 apkprobe triage packages.txt --allow com.corp.cleaner
+
+# Known-CVE enrichment: match the APK's shipped components against the
+# bundled ~262k-record OSV vulnerability DB (fully offline; exits non-zero
+# on a HIGH/CRITICAL match so it gates CI)
+apkprobe vulns app.apk
+apkprobe vulns app.apk --cve-only --min-confidence exact-advisory
+apkprobe vulns app.apk --json > apkprobe-vulns.json
 ```
+
+## Known-CVE enrichment against a bundled OSV DB (offline)
+
+A manifest scan tells you how an app is configured; it does not tell you whether
+the **libraries the app ships are already known-vulnerable**. `apkprobe vulns`
+closes that gap — entirely offline.
+
+It harvests **real component evidence** out of the APK ZIP (no fabrication, no
+fingerprint guessing):
+
+* **CVE / GHSA ids** the app names verbatim in any text resource — changelogs,
+  `third_party_licenses` / OSS-credits blobs, SBOMs. (Strongest signal: the app
+  itself names the advisory.)
+* **Maven coordinates** (`group:artifact:version`) in dependency listings;
+* **Bundled JavaScript libraries** — `foo-1.2.3.min.js` and `package.json`
+  `name`/`dependencies` for Cordova / Capacitor / React-Native apps (npm);
+* **Native shared objects** — `lib/<abi>/lib<name>.so` artifact names.
+
+…then correlates that evidence against a **bundled, consolidated OSV corpus of
+~262,000 real vulnerabilities** (`apkprobe/cognis_vulndb.jsonl.gz`, ~6.4 MB,
+spanning npm / Maven / Go / PyPI / RubyGems / crates.io / NuGet). Every hit is
+ranked by confidence (`exact-advisory` > `coordinate` > `artifact-name` >
+`native-name`), banded by severity (the **CVSS v3.x base score is computed from
+the vector** — Log4Shell resolves to `10.0` → CRITICAL), and attributed to the
+exact APK entry the evidence came from. No network. No key. Works air-gapped the
+moment the repo is cloned.
+
+```
+$ apkprobe vulns app.apk
+package: com.acme.app
+vuln DB: 262351 records (bundled OSV, offline)
+evidence: 9 component(s) harvested from the APK
+matches:  83 hit(s) across 71 distinct advisor(ies)
+worst severity: CRITICAL
+  [exact-advisory] CVE-2021-44228  ->  CVE-2021-44228 (CRITICAL)
+                   Remote code injection in Log4j
+                   via assets/third_party_licenses.txt
+  [coordinate    ] com.fasterxml.jackson.core:jackson-databind@2.9.8  ->  CVE-2018-14719 (CRITICAL)
+                   Arbitrary Code Execution in jackson-databind
+                   via assets/third_party_licenses.txt
+  ...
+```
+
+The command exits **non-zero on any HIGH/CRITICAL** match, so it drops into a CI
+supply-chain gate next to `scan` and `diff`. Filter with `--cve-only`,
+`--min-confidence <level>`, and `--json` for machine output.
+
+> **Honest scope.** The bundled corpus is *name/advisory-keyed* (compact OSV), so
+> a package match means "this component is named in N known advisories", not a
+> version-resolved exploitability verdict — confidence labels make that explicit.
+> The DB is **real OSV data**; nothing is fabricated. For version-precise range
+> resolution, refresh the full OSV/NVD range data into an edge cache (below).
+
+### Edge / air-gap intelligence refresh
+
+`apkprobe feeds` (backed by `apkprobe/datafeeds.py` + the keyless
+`data_feeds_2026.json` catalog of 35 real feeds — CISA KEV, EPSS, OSV, NVD,
+GHSA, MITRE ATT&CK STIX, NIST 800-53 OSCAL, abuse.ch C2/IOC, …) keeps the
+intelligence current on **disconnected / edge / field gear**:
+
+```bash
+# On a connected box: refresh feeds into the local cache
+apkprobe feeds list --domain vuln
+apkprobe feeds update osv nvd-cve github-advisories
+apkprobe feeds bulk nvd-cve --max 250000        # paginate the full NVD set to disk
+
+# Sneakernet the cache into an air-gapped enclave
+apkprobe feeds snapshot-export feeds.tar.gz
+#   ...carry feeds.tar.gz across the air gap...
+apkprobe feeds snapshot-import feeds.tar.gz
+apkprobe feeds get cisa-kev --offline           # serve from cache, never touch the network
+```
+
+Standard-library only (`urllib`), disk-cached with per-feed freshness metadata,
+`--offline` serves cache and never opens a socket. The cache location is set by
+`COGNIS_FEEDS_CACHE` (default `~/.cache/cognis-feeds`). `apkprobe vulns` itself
+never hits the network — only `feeds update`/`bulk` do, and only when you run
+them on a connected box.
 
 ## Active mode (authorized-use only)
 
@@ -120,19 +217,22 @@ non-zero. Split APKs are pulled as `com.acme.app.0.apk`, `…1.apk`, etc.
 ## Language ports
 
 The **core check** — the MASVS/MASTG manifest rule engine — is also ported to
-Go, Rust, and TypeScript under [`ports/`](ports/), so it can run inside
+Go, Rust, TypeScript, and Kotlin under [`ports/`](ports/), so it can run inside
 non-Python toolchains. Each port consumes a **normalized manifest JSON**
 (produced by `apkprobe.normalize.normalize_manifest`) and emits the same
-findings as the Python reference, finding-for-finding. The Go and Rust ports are
-**verified on GitHub-hosted CI runners** (`.github/workflows/ports.yml`), not
-locally — the binary-AXML decoder stays in the Python reference implementation.
+findings as the Python reference, finding-for-finding. The TypeScript port also
+mirrors the **component-evidence harvester + CVSS scoring** from `vulns` (see
+`ports/ts/src/vulnmatch.ts`). All ports are **verified on GitHub-hosted CI
+runners** (`.github/workflows/ports.yml`) — the binary-AXML decoder and the
+bundled OSV DB stay in the Python reference implementation.
 
 | Port | Dir | Build / test |
 |------|-----|--------------|
 | Python (reference) | `apkprobe/` | `python -m pytest` |
 | Go | `ports/go` | `go test ./...` |
 | Rust | `ports/rust` | `cargo test` |
-| TypeScript | `ports/ts` | `npm ci && npm run build && npm test` |
+| TypeScript | `ports/ts` | `npm install && npm run build && npm test` |
+| Kotlin | `ports/kotlin` | `kotlinc … && java -cp apkprobe-kt.jar TestKt` |
 
 ```bash
 # Pipe a normalized manifest into any port; they agree on the findings
@@ -214,8 +314,12 @@ active.py         authorization-gated ADB device pull (OFF by default, gated)
 normalize.py      normalized-manifest JSON contract shared with the ports
 analyzer.py       orchestration + optional scopeward gating
 sarif.py          SARIF 2.1.0 export
-cli.py            scan / profile / diff / inventory / triage / pull subcommands
-ports/            Go + Rust + TypeScript ports of the core rule engine (CI-verified)
+components.py     harvest CVE/GHSA refs + Maven/npm/native component evidence (offline)
+vulndb_local.py   bundled ~262k-record OSV corpus (lazy gz, indexed by CVE/package)
+vulnmatch.py      correlate component evidence -> OSV DB + CVSS scoring/banding
+datafeeds.py      OSV/NVD/GHSA/KEV edge cache (refresh online, serve offline, air-gap snapshot)
+cli.py            scan / profile / diff / inventory / triage / vulns / feeds / pull
+ports/            Go + Rust + TypeScript + Kotlin ports of the core rule engine (CI-verified)
 ```
 
 `Finding`/`Severity` come from `scopeward` when installed, so apkprobe results

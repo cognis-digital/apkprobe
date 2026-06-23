@@ -113,3 +113,47 @@ def new_apk_path(tmp_path, manifest_axml) -> str:
     p = tmp_path / "new.apk"
     p.write_bytes(data)
     return str(p)
+
+
+# --- vuln-enrichment fixtures: an APK carrying real component evidence ------- #
+# These names/coords are real, well-known vulnerable components; the advisories
+# they map to live in the bundled OSV corpus. No fabricated data.
+_LICENSES_BLOB = (
+    "Third-party software notices\n"
+    "----------------------------\n"
+    "This application bundles:\n"
+    "  org.apache.logging.log4j:log4j-core:2.14.1 "
+    "(see CVE-2021-44228 / GHSA-jfh8-c2jp-5v3q)\n"
+    "  com.fasterxml.jackson.core:jackson-databind:2.9.8\n"
+    "  com.squareup.okhttp3:okhttp:3.12.0\n"
+)
+_PACKAGE_JSON = (
+    '{"name":"acme-webview","version":"1.0.0",'
+    '"dependencies":{"lodash":"4.17.4","axios":"0.18.0"}}'
+)
+
+
+@pytest.fixture
+def vuln_apk_path(tmp_path, manifest_axml) -> str:
+    """An APK whose resources name real vulnerable components + advisory ids."""
+    data = build_apk(manifest_axml, extra={
+        "assets/third_party_licenses.txt": _LICENSES_BLOB,
+        "assets/www/js/lodash-4.17.4.min.js": "// lodash bundle",
+        "assets/www/package.json": _PACKAGE_JSON,
+        "lib/arm64-v8a/libsqlite.so": b"\x7fELFnative",
+        "lib/armeabi-v7a/libc++_shared.so": b"\x7fELFskip",
+    })
+    p = tmp_path / "vuln.apk"
+    p.write_bytes(data)
+    return str(p)
+
+
+@pytest.fixture
+def clean_apk_path(tmp_path, manifest_axml) -> str:
+    """An APK with no component evidence at all (no matches expected)."""
+    data = build_apk(manifest_axml, extra={
+        "res/values/strings.xml": "<resources><string name=\"x\">hello</string></resources>",
+    })
+    p = tmp_path / "clean.apk"
+    p.write_bytes(data)
+    return str(p)

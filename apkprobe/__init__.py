@@ -22,6 +22,13 @@ from .passive import (
     Inventory, ComponentRow, TriageHit, render_inventory,
 )
 from .normalize import normalize_manifest, normalize_manifest_json
+from .vulndb_local import VulnDB
+from .components import (
+    ComponentEvidence, extract_components, extract_from_text, split_evidence,
+)
+from .vulnmatch import (
+    VulnHit, VulnReport, correlate, enrich_apk,
+)
 from .active import (
     DeviceAcquirer, ActiveConfig, RateLimiter, PullResult,
     AdbCliBackend, ActiveError, AuthorizationError, ScopeError,
@@ -45,6 +52,10 @@ __all__ = [
     "AdbCliBackend", "ActiveError", "AuthorizationError", "ScopeError",
     "validate_serial", "validate_package", "BANNER",
     "normalize_manifest", "normalize_manifest_json",
+    "VulnDB",
+    "ComponentEvidence", "extract_components", "extract_from_text",
+    "split_evidence",
+    "VulnHit", "VulnReport", "correlate", "enrich_apk",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
