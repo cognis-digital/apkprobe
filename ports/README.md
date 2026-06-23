@@ -16,9 +16,13 @@ ports consume already-decoded manifest JSON.
 | Go | `ports/go` | `go test ./...` |
 | Rust | `ports/rust` | `cargo test` |
 | TypeScript | `ports/ts` | `npm ci && npm test` |
+| Kotlin | `ports/kotlin` | `kotlinc Rules.kt Main.kt Test.kt -include-runtime -d apkprobe-kt.jar && java -cp apkprobe-kt.jar TestKt` |
 
-All three are verified on GitHub-hosted runners by `.github/workflows/ports.yml`.
-The Go and Rust toolchains were **not** built locally — they are CI-verified.
+All four are verified on GitHub-hosted runners by `.github/workflows/ports.yml`.
+The Go/Rust/Kotlin toolchains were **not** built locally — they are CI-verified.
+Kotlin is the native Android language, so it is the natural host for these
+manifest checks; the port is stdlib-only (it bundles a tiny JSON reader) and
+compiles with a bare `kotlinc` — no Gradle.
 
 ## Normalized manifest JSON
 

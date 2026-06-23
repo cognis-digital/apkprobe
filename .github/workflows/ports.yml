@@ -45,3 +45,32 @@ jobs:
       - run: npm install
       - run: npm run build
       - run: npm test
+
+  kotlin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ports/kotlin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: install kotlin compiler
+        run: |
+          curl -sSL -o /tmp/kotlin.zip \
+            https://github.com/JetBrains/kotlin/releases/download/v1.9.24/kotlin-compiler-1.9.24.zip
+          unzip -q /tmp/kotlin.zip -d /opt
+          echo "/opt/kotlinc/bin" >> "$GITHUB_PATH"
+      - name: compile
+        run: kotlinc Rules.kt Main.kt Test.kt -include-runtime -d apkprobe-kt.jar
+      - name: unit tests
+        run: java -cp apkprobe-kt.jar TestKt
+      - name: run on fixture (debuggable -> HIGH, exit 2)
+        run: |
+          set +e
+          out=$(java -cp apkprobe-kt.jar MainKt manifest.fixture.json); code=$?
+          echo "$out"; echo "exit=$code"
+          echo "$out" | grep -q '"severity":"HIGH"' || { echo "expected HIGH"; exit 1; }
+          [ "$code" = "2" ] || { echo "expected exit 2"; exit 1; }
