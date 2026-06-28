@@ -34,6 +34,61 @@ It is part of the Cognis mobile-security suite and integrates with
 [`scopeward`](../scopeward): point it at a signed engagement scope and it will
 refuse to analyze any package that isn't an authorized target.
 
+
+<!-- cognis:example:start -->
+## 🔎 Example output
+
+Real, reproducible output from the tool — runs offline:
+
+```console
+$ apkprobe --help
+usage: apkprobe [-h] [--version]
+                {scan,profile,diff,inventory,triage,vulns,feeds,pull} ...
+
+apkprobe command-line interface.
+
+positional arguments:
+  {scan,profile,diff,inventory,triage,vulns,feeds,pull}
+    scan                analyze an APK
+    profile             attack-surface profile + risk score
+    diff                diff two APK versions for regressions
+    inventory           flatten the IPC/component surface (offline)
+    triage              offline triage of a captured package list
+    vulns               correlate APK component evidence with the bundled OSV
+                        DB (offline)
+    feeds               manage the offline OSV/NVD/GHSA/KEV edge cache
+                        (refresh/snapshot)
+    pull                ACTIVE (authorized-only): pull an installed app off a
+                        connected device
+
+options:
+  -h, --help            show this help message and exit
+  --version
+```
+
+> Blocks above are real `apkprobe` output — reproduce them from a clone.
+
+**Sample result format** _(illustrative values — run on your own data for real findings):_
+
+```
+{
+  "scan": {
+    "apk_name": "com.example.app",
+    "version": "1.2.3",
+    "components": [
+      {"name": "MainActivity", "risk_score": 4},
+      {"name": "NetworkService", "risk_score": 6}
+    ],
+    "vulnerabilities": [
+      {"id": "CVE-2022-1234", "severity": "high"},
+      {"id": "CVE-2021-5678", "severity": "medium"}
+    ]
+  }
+}
+```
+
+<!-- cognis:example:end -->
+
 ## Why it's different
 
 Most "APK scanners" shell out to `aapt`/`apktool` or pull in heavy SDKs.
