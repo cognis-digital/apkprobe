@@ -1,0 +1,11 @@
+[2026-07-17 06:32:52] === enhance · apkprobe · words=120000 loc>=10000 langs=9 push=True ===
+[2026-07-17 06:32:58] phase DOCS — longform 120000-word corpus -> docs/corpus/
+[2026-07-17 14:26:35] phase POLYGLOT — expanding to >= 10000 LOC across 9 languages
+[2026-07-17 14:27:01]   facets: ['apk_container_parser', 'manifest_xml_extractor', 'axml_binary_decoder', 'resource_table_reader', 'permission_analyzer', 'signature_validator']
+[2026-07-17 14:28:49]   +polyglot/python/apk_container_parser.py  (loc now ~7897)
+[2026-07-17 14:30:26]   +polyglot/go/apk_container_parser.go  (loc now ~8295)
+[2026-07-17 14:32:21]   +polyglot/rust/apk_container_parser.rs  (loc now ~8704)
+[2026-07-17 14:34:30]   +polyglot/typescript/apk_container_parser.ts  (loc now ~9148)
+[2026-07-17 14:36:24]   +polyglot/c/apk_container_parser.c  (loc now ~9580)
+[2026-07-17 14:38:17]   +polyglot/cpp/apk_container_parser.cpp  (loc now ~9972)
+[2026-07-17 14:40:13]   +polyglot/java/apk_container_parser.java  (loc now ~10482)
